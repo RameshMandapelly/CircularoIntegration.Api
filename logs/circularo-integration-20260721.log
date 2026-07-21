@@ -1,0 +1,7 @@
+2026-07-21 09:38:16.791 [INF] Circularo Integration Middleware starting… {}
+2026-07-21 09:38:16.859 [INF] Now listening on: http://localhost:5000 {"EventId":{"Id":14,"Name":"ListeningOnAddress"},"SourceContext":"Microsoft.Hosting.Lifetime"}
+2026-07-21 09:38:16.862 [INF] Application started. Press Ctrl+C to shut down. {"SourceContext":"Microsoft.Hosting.Lifetime"}
+2026-07-21 09:38:16.862 [INF] Hosting environment: Development {"SourceContext":"Microsoft.Hosting.Lifetime"}
+2026-07-21 09:38:16.863 [INF] Content root path: C:\Users\ramesh.rajalingu\source\repos\CircularoIntegration.Api\CircularoIntegration.Api {"SourceContext":"Microsoft.Hosting.Lifetime"}
+2026-07-21 09:38:17.102 [INF] HTTP GET / responded 404 in 2.7467 ms {"SourceContext":"Serilog.AspNetCore.RequestLoggingMiddleware","RequestId":"0HNN6T91VNG8N:00000001","ConnectionId":"0HNN6T91VNG8N"}
+2026-07-21 09:39:52.199 [INF] Application is shutting down... {"SourceContext":"Microsoft.Hosting.Lifetime"}

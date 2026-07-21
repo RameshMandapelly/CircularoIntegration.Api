@@ -1,0 +1,24 @@
+2026-07-09 14:06:57.425 [INF] Circularo Integration Middleware starting… {}
+2026-07-09 14:06:57.483 [INF] Now listening on: http://localhost:5000 {"EventId":{"Id":14,"Name":"ListeningOnAddress"},"SourceContext":"Microsoft.Hosting.Lifetime"}
+2026-07-09 14:06:57.486 [INF] Application started. Press Ctrl+C to shut down. {"SourceContext":"Microsoft.Hosting.Lifetime"}
+2026-07-09 14:06:57.486 [INF] Hosting environment: Development {"SourceContext":"Microsoft.Hosting.Lifetime"}
+2026-07-09 14:06:57.487 [INF] Content root path: C:\Users\ramesh.rajalingu\source\repos\CircularoIntegration.Api\CircularoIntegration.Api {"SourceContext":"Microsoft.Hosting.Lifetime"}
+2026-07-09 14:06:57.775 [INF] HTTP GET / responded 404 in 1.3771 ms {"SourceContext":"Serilog.AspNetCore.RequestLoggingMiddleware","RequestId":"0HNMTK77R7MTL:00000001","ConnectionId":"0HNMTK77R7MTL"}
+2026-07-09 14:07:41.638 [INF] HTTP GET /logs responded 200 in 61.3131 ms {"SourceContext":"Serilog.AspNetCore.RequestLoggingMiddleware","RequestId":"0HNMTK77R7MTN:00000004","ConnectionId":"0HNMTK77R7MTN"}
+2026-07-09 14:27:23.670 [INF] Circularo Integration Middleware starting… {}
+2026-07-09 14:27:23.718 [INF] Now listening on: http://localhost:5000 {"EventId":{"Id":14,"Name":"ListeningOnAddress"},"SourceContext":"Microsoft.Hosting.Lifetime"}
+2026-07-09 14:27:23.721 [INF] Application started. Press Ctrl+C to shut down. {"SourceContext":"Microsoft.Hosting.Lifetime"}
+2026-07-09 14:27:23.722 [INF] Hosting environment: Development {"SourceContext":"Microsoft.Hosting.Lifetime"}
+2026-07-09 14:27:23.722 [INF] Content root path: C:\Users\ramesh.rajalingu\source\repos\CircularoIntegration.Api\CircularoIntegration.Api {"SourceContext":"Microsoft.Hosting.Lifetime"}
+2026-07-09 14:27:24.008 [INF] HTTP GET / responded 404 in 1.2750 ms {"SourceContext":"Serilog.AspNetCore.RequestLoggingMiddleware","RequestId":"0HNMTKIL9I5JF:00000001","ConnectionId":"0HNMTKIL9I5JF"}
+2026-07-09 14:27:40.130 [INF] HTTP GET /logs responded 200 in 66.6447 ms {"SourceContext":"Serilog.AspNetCore.RequestLoggingMiddleware","RequestId":"0HNMTKIL9I5JH:00000004","ConnectionId":"0HNMTKIL9I5JH"}
+2026-07-09 14:30:41.773 [INF] HTTP GET /logs responded 200 in 7.0681 ms {"SourceContext":"Serilog.AspNetCore.RequestLoggingMiddleware","RequestId":"0HNMTKIL9I5JJ:00000001","ConnectionId":"0HNMTKIL9I5JJ"}
+2026-07-09 14:30:41.837 [WRN] Security:WebhookApiKey is NOT configured – all requests are being allowed! {"SourceContext":"CircularoIntegration.Api.Middleware.ApiKeyMiddleware","RequestId":"0HNMTKIL9I5JJ:00000002","RequestPath":"/favicon.ico","ConnectionId":"0HNMTKIL9I5JJ"}
+2026-07-09 14:30:41.840 [INF] HTTP GET /favicon.ico responded 404 in 3.3574 ms {"SourceContext":"Serilog.AspNetCore.RequestLoggingMiddleware","RequestId":"0HNMTKIL9I5JJ:00000002","ConnectionId":"0HNMTKIL9I5JJ"}
+2026-07-09 14:31:11.858 [INF] HTTP GET /logs responded 200 in 7.7129 ms {"SourceContext":"Serilog.AspNetCore.RequestLoggingMiddleware","RequestId":"0HNMTKIL9I5JJ:00000003","ConnectionId":"0HNMTKIL9I5JJ"}
+2026-07-09 14:31:41.889 [INF] HTTP GET /logs responded 200 in 4.9075 ms {"SourceContext":"Serilog.AspNetCore.RequestLoggingMiddleware","RequestId":"0HNMTKIL9I5JJ:00000004","ConnectionId":"0HNMTKIL9I5JJ"}
+2026-07-09 14:32:11.947 [INF] HTTP GET /logs responded 200 in 4.0438 ms {"SourceContext":"Serilog.AspNetCore.RequestLoggingMiddleware","RequestId":"0HNMTKIL9I5JJ:00000005","ConnectionId":"0HNMTKIL9I5JJ"}
+2026-07-09 14:32:42.023 [INF] HTTP GET /logs responded 200 in 5.7194 ms {"SourceContext":"Serilog.AspNetCore.RequestLoggingMiddleware","RequestId":"0HNMTKIL9I5JJ:00000006","ConnectionId":"0HNMTKIL9I5JJ"}
+2026-07-09 14:33:12.099 [INF] HTTP GET /logs responded 200 in 5.1830 ms {"SourceContext":"Serilog.AspNetCore.RequestLoggingMiddleware","RequestId":"0HNMTKIL9I5JJ:00000007","ConnectionId":"0HNMTKIL9I5JJ"}
+2026-07-09 14:33:42.178 [INF] HTTP GET /logs responded 200 in 5.3083 ms {"SourceContext":"Serilog.AspNetCore.RequestLoggingMiddleware","RequestId":"0HNMTKIL9I5JJ:00000008","ConnectionId":"0HNMTKIL9I5JJ"}
+2026-07-09 14:33:50.554 [INF] Application is shutting down... {"SourceContext":"Microsoft.Hosting.Lifetime"}

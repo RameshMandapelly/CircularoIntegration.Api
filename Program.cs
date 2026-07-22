@@ -36,6 +36,7 @@ builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IKfsNotificationService, KfsNotificationService>();
 builder.Services.Configure<SmtpSettings>(builder.Configuration.GetSection("SmtpSettings"));
 builder.Services.Configure<KfsEmailOptions>(builder.Configuration.GetSection("KfsEmail"));
+builder.Services.AddScoped<OfferLetterDocumentService>();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();

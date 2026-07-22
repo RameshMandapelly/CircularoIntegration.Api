@@ -17,13 +17,15 @@ public class SigningController : ControllerBase
     private readonly CircularoService _circularo;
     private readonly IKfsNotificationService _kfs;
     private readonly ILogger<SigningController> _log;
+    private readonly OfferLetterDocumentService _offerLetterDocs;
 
-    public SigningController(AppDbContext db, LeadSquaredService lsq, CircularoService circularo, IKfsNotificationService kfs, ILogger<SigningController> log)
+    public SigningController(AppDbContext db, LeadSquaredService lsq, CircularoService circularo,
+        IKfsNotificationService kfs, OfferLetterDocumentService offerLetterDocs, ILogger<SigningController> log)
     {
-        _db = db;
-        _lsq = lsq;
-        _circularo = circularo;
-        _kfs = kfs;
+        _db = db; _lsq = lsq;
+         _circularo = circularo; 
+         _kfs = kfs;
+        _offerLetterDocs = offerLetterDocs; 
         _log = log;
     }
 
@@ -107,18 +109,38 @@ public class SigningController : ControllerBase
         string documentId = string.Empty;
         try
         {
-            // 1. Get customer email from the lead
             var (email, firstName) = await _lsq.GetLeadEmailAsync(leadId);
-            if (string.IsNullOrWhiteSpace(email))
-                return UnprocessableEntity(new { message = $"Lead {leadId} has no email address", status = 422 });
-            //  Create a fresh document for this lead from the phase template, then send for signature
+            string recipientEmail = email ?? string.Empty;
             var docTitle = $"{config.DocumentName} - Lead {leadId}";
-            //documentId = await _circularo.CreateDocumentFromFileAsync(config.CircularoFileHash, docTitle);
-            documentId = await _circularo.CreateDocumentFromLocalTemplateAsync(docTitle);
-            // 2. Send the phase document for signature via Circularo
+
+            if (config.RequiresFieldMerge)
+            {
+                var offerDetails = await _lsq.GetLeadOfferDetailsAsync(leadId);
+
+                if (string.IsNullOrWhiteSpace(offerDetails.AuthorizedSignatoryEmail))
+                    return UnprocessableEntity(new { message = $"Lead {leadId} has no authorized signatory email", status = 422 });
+
+                if (!offerDetails.IsComplete)
+                    _log.LogWarning("Lead {LeadId} offer letter fields incomplete — sending with blanks.", leadId);
+
+                recipientEmail = offerDetails.AuthorizedSignatoryEmail!;
+                firstName = offerDetails.CustomerName ?? firstName;
+
+                var pdfBytes = await _offerLetterDocs.GenerateOfferLetterPdfAsync(offerDetails);
+                documentId = await _circularo.CreateDocumentFromBytesAsync(pdfBytes, $"offer-letter-{leadId}.pdf", docTitle);
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(recipientEmail))
+                    return UnprocessableEntity(new { message = $"Lead {leadId} has no email address", status = 422 });
+
+                documentId = await _circularo.CreateDocumentFromLocalTemplateAsync(docTitle);
+            }
+
             var shareResponse = await _circularo.SendForSignatureAsync(
-                documentId, email,
+                documentId, recipientEmail,
                 $"Dear {firstName ?? "Customer"}, please sign: {config.DocumentName}");
+           
 
             // 3. Record the transaction (correlation backbone for the callback)
             _db.SigningTransactions.Add(new SigningTransaction
@@ -295,6 +317,23 @@ public class SigningController : ControllerBase
         }
     }
 
+    [HttpGet("field-mapping")]
+    public async Task<IActionResult> GetFieldMapping([FromServices] LeadSquaredService lsq)
+    {
+        var all = await lsq.GetAllFieldsMetadataAsync();
+
+        var targets = new[]
+        {
+        "First Name", "Funded Facility Limit", "Finance Amount",
+        "Purpose", "Tenor", "Profit Rate", "Finance Tenure", "Payment Terms"
+    };
+
+        var matches = all.Where(f =>
+            targets.Any(t => f.DisplayName.Contains(t, StringComparison.OrdinalIgnoreCase)));
+
+        return Ok(matches.Select(m => new { m.DisplayName, m.SchemaName }));
+    }
+
     // ------------------------- helpers -------------------------
 
     /// <summary>
@@ -331,6 +370,23 @@ public class SigningController : ControllerBase
         }
         return null;
     }
+
+    // TEMP — local testing only. Bypasses DB/Circularo, returns the merged PDF
+    // directly so you can eyeball the field substitution. Delete before demo.
+    [HttpGet("debug/offer-letter/{leadId}")]
+    public async Task<IActionResult> DebugGenerateOfferLetter(
+        string leadId,
+        [FromServices] OfferLetterDocumentService offerDocs)
+    {
+        var details = await _lsq.GetLeadOfferDetailsAsync(leadId);
+        _log.LogInformation("DEBUG offer details for {LeadId}: {@Details}", leadId, details);
+
+        var pdfBytes = await offerDocs.GenerateOfferLetterPdfAsync(details);
+        return File(pdfBytes, "application/pdf", $"offer-letter-{leadId}-debug.pdf");
+    }
+
+
+
     // LeadSquared/Circularo webhook URL validation pings (HEAD/GET) — answer 200
     [HttpHead("initiate"), HttpGet("initiate")]
     public IActionResult InitiateProbe() => Ok(new { status = "READY" });

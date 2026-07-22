@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using CircularoIntegration.Api.Models;
 
+
 namespace CircularoIntegration.Api.Services;
 
 /// <summary>
@@ -184,6 +185,80 @@ public class LeadSquaredService
         }
         return null;
     }
+
+    public async Task<LeadOfferDetails> GetLeadOfferDetailsAsync(string leadId)
+    {
+        var url = $"{BaseUrl}/v2/LeadManagement.svc/Leads.GetById?{Keys}&id={Uri.EscapeDataString(leadId)}";
+        _log.LogInformation("LSQ Leads.GetById (offer details) URL → {url}", url);
+
+        var res = await _http.GetAsync(url);
+        var body = await res.Content.ReadAsStringAsync();
+        _log.LogInformation("LSQ Leads.GetById {LeadId} → {Status}", leadId, (int)res.StatusCode);
+
+        if (!res.IsSuccessStatusCode)
+            throw new DownstreamException((int)res.StatusCode, body);
+
+        using var doc = JsonDocument.Parse(body);
+        var root = doc.RootElement;
+        var lead = root.ValueKind == JsonValueKind.Array && root.GetArrayLength() > 0 ? root[0] : root;
+
+        if (lead.ValueKind != JsonValueKind.Object)
+        {
+            _log.LogWarning("Unexpected Leads.GetById shape for lead {LeadId}", leadId);
+            return new LeadOfferDetails();
+        }
+
+        string? Get(string field) =>
+            lead.TryGetProperty(field, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+
+        const string section = "LeadSquared:OfferLetterFields:";
+        var details = new LeadOfferDetails
+        {
+            CustomerName = Get(_cfg[$"{section}CustomerNameField"] ?? "FirstName"),
+            AuthorizedSignatoryEmail = Get(_cfg[$"{section}AuthorizedSignatoryEmailField"] ?? "EmailAddress"),
+            FundedFacilityLimit = Get(_cfg[$"{section}FundedFacilityLimitField"] ?? "FundedFacilityLimit"),
+            RequestedFinanceAmount = Get(_cfg[$"{section}RequestedFinanceAmountField"] ?? "RequestedFinanceAmount"),
+            Purpose = Get(_cfg[$"{section}PurposeField"] ?? "Purpose"),
+            Tenor = Get(_cfg[$"{section}TenorField"] ?? "Tenor"),
+            ProfitRate = Get(_cfg[$"{section}ProfitRateField"] ?? "ProfitRate"),
+            Frequency = Get(_cfg[$"{section}FrequencyField"] ?? "Frequency"),
+            PaymentTerms = Get(_cfg[$"{section}PaymentTermsField"] ?? "PaymentTerms")
+        };
+
+        if (!details.IsComplete)
+            _log.LogWarning("Lead {LeadId} offer details incomplete: {@Details}", leadId, details);
+
+        return details;
+    }
+
+    /// <summary>
+    /// Dumps every lead field's SchemaName + DisplayName. One-time diagnostic
+    /// to resolve the mx_Custom_N mappings — not called by the webhook flow.
+    /// </summary>
+    public async Task<List<(string SchemaName, string DisplayName)>> GetAllFieldsMetadataAsync()
+    {
+        var url = $"{BaseUrl}/v2/LeadManagement.svc/LeadsMetaData.Get?{Keys}";
+        _log.LogInformation("LSQ LeadsMetaData.Get URL → {url}", url);
+
+        var res = await _http.GetAsync(url);
+        var body = await res.Content.ReadAsStringAsync();
+        if (!res.IsSuccessStatusCode)
+            throw new DownstreamException((int)res.StatusCode, body);
+
+        using var doc = JsonDocument.Parse(body);
+        var result = new List<(string, string)>();
+
+        foreach (var el in doc.RootElement.EnumerateArray())
+        {
+            var schema = el.TryGetProperty("SchemaName", out var s) ? s.GetString() : null;
+            var display = el.TryGetProperty("DisplayName", out var d) ? d.GetString() : null;
+            if (!string.IsNullOrEmpty(schema))
+                result.Add((schema, display ?? string.Empty));
+        }
+
+        return result;
+    }
+   
     private static string Truncate(string s, int max = 800) => s.Length <= max ? s : s[..max] + "…";
 
 }

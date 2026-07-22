@@ -31,10 +31,13 @@ public class OfferLetterDocumentService
                     {
                               ["FundedFacilityLimit"] = details.FundedFacilityLimit ?? string.Empty,
                               ["RequestedFinanceAmount"] = details.RequestedFinanceAmount ?? string.Empty,
-                              ["Purpose"] = details.Purpose ?? string.Empty,
-                              ["Tenure"] = details.Tenure ?? string.Empty,
+                              ["Purpose"] = details.Purpose ?? string.Empty,                              
                               ["ProfitRate"] = details.ProfitRate ?? string.Empty,
-                              ["FirstName"] = details.FirstName ?? "Customer"
+                              ["CustomerName"] = details.CustomerName ?? "Customer",
+                        
+                              ["Tenor"] = details.Tenor ?? string.Empty,   // was Tenure
+                              ["Frequency"] = details.Frequency ?? string.Empty,
+                              ["PaymentTerms"] = details.PaymentTerms ?? string.Empty,
                     };
 
                     FillTemplate(docxPath, tokens);
@@ -72,7 +75,7 @@ public class OfferLetterDocumentService
                                         extraRun.Remove();
                     }
 
-                    wordDoc.MainDocumentPart.Document.Save();
+                    wordDoc.MainDocumentPart!.Document.Save();
           }
 
           private async Task<string> ConvertDocxToPdfAsync(string docxPath, string outDir, CancellationToken ct)

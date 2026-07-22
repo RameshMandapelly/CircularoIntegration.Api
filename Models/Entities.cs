@@ -22,6 +22,9 @@ public class PhaseDocumentConfig
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     /// <summary>Circularo file hash of the template PDF; a fresh document is created from it per lead.</summary>
     public string CircularoFileHash { get; set; } = string.Empty;
+    // NEW: true = merge lead fields into a docx template and convert to PDF
+    // (Offer Letter). false = send the static local template as-is (current behavior).
+    public bool RequiresFieldMerge { get; set; } = false;
 }
 
 public enum SigningStatus { Sent = 0, Signed = 1, Attached = 2, Failed = 9 }

@@ -237,7 +237,12 @@ public class CircularoService
             return h.GetString()!;
         throw new DownstreamException(500, $"Could not find file hash in saveFile response: {Truncate(body)}");
     }
-
+    /// <summary>Uploads freshly-generated PDF bytes and creates a Circularo document from them.</summary>
+    public async Task<string> CreateDocumentFromBytesAsync(byte[] pdfBytes, string fileName, string title)
+    {
+        var hash = await UploadFileAsync(pdfBytes, fileName);
+        return await CreateDocumentFromFileAsync(hash, title);
+    }
     /// <summary>Reads the phase template PDF from local disk, uploads it for a fresh hash,
     /// then creates a new Circularo document from it.</summary>
     public async Task<string> CreateDocumentFromLocalTemplateAsync(string title)

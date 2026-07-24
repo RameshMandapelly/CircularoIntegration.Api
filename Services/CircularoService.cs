@@ -57,7 +57,7 @@ public class CircularoService
                     timestamp = false,
                     required = true,
                     type = "signature",
-                    pages = new[] { 1 },
+                    pages = new[] { 4 },
                     position = new
                     {
                         percentX = 0.5,

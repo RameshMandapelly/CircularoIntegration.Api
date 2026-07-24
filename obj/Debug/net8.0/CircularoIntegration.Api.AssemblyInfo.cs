@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("CircularoIntegration.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+bc8df58107d5893df161f579dae1bb173d214810")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+0285ee96ff0265df6abb53614ef954685f426342")]
 [assembly: System.Reflection.AssemblyProductAttribute("CircularoIntegration.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("CircularoIntegration.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

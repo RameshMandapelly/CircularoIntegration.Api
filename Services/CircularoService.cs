@@ -30,43 +30,33 @@ public class CircularoService
     /// customer's email for e-signature. Returns the raw response JSON so the
     /// caller can store any reference ids Circularo returns.
     /// </summary>
-    public async Task<string> SendForSignatureAsync(string documentId, string recipientEmail, string? message = null)
+    public async Task<string> SendForSignatureAsync(
+     string documentId, string recipientEmail, string? message = null, int signaturePage = 1)
     {
         var url = $"{BaseUrl}/api/v1/share?token={Uri.EscapeDataString(Token)}";
-        _log.LogInformation("Circularo SendForSignatureAsync URL → {url} ", url);
         var payload = new
         {
             objectType = "document",
             type = _cfg["Circularo:DocumentType"] ?? "d_default",
             id = documentId,
-            data = new object[]
-                    {
-                new
-                {
-                    sharePurpose = "sign",
-                    shareTo = recipientEmail,            // plain string per Circularo docs
-                    message = message ?? "Please sign the attached document.",
-                    validUntil = DateTime.UtcNow.AddDays(7).ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
-                }
-                    },
-            signatureFields = new object[]
-                    {
-                new
-                {
-                    user = new[] { recipientEmail },
-                    timestamp = false,
-                    required = true,
-                    type = "signature",
-                    pages = new[] { 4 },
-                    position = new
-                    {
-                        percentX = 0.5,
-                        percentY = 0.8,
-                        percentWidth = 0.3,
-                        percentHeight = 0.08
-                    }
-                }
-                    }
+            data = new object[] {
+            new {
+                sharePurpose = "sign",
+                shareTo = recipientEmail,
+                message = message ?? "Please sign the attached document.",
+                validUntil = DateTime.UtcNow.AddDays(7).ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+            }
+        },
+            signatureFields = new object[] {
+            new {
+                user = new[] { recipientEmail },
+                timestamp = false,
+                required = true,
+                type = "signature",
+                pages = new[] { signaturePage },   
+                position = new { percentX = 0.5, percentY = 0.8, percentWidth = 0.3, percentHeight = 0.08 }
+            }
+        }
         };
         _log.LogInformation("Circularo SendForSignatureAsync URL → {url} ", url);
         var json = JsonSerializer.Serialize(payload);
@@ -253,4 +243,25 @@ public class CircularoService
         var freshHash = await UploadFileAsync(bytes, Path.GetFileName(path));
         return await CreateDocumentFromFileAsync(freshHash, title);
     }
+
+
+
+    // Replace the hardcoded CreateDocumentFromLocalTemplateAsync with a generic version;
+    // keep the old one for Phase 1 back-compat.
+    public async Task<string> CreateDocumentFromTemplatePathAsync(string templatePath, string title)
+    {
+        var bytes = await File.ReadAllBytesAsync(templatePath);
+        var freshHash = await UploadFileAsync(bytes, Path.GetFileName(templatePath));
+        return await CreateDocumentFromFileAsync(freshHash, title);
+    }
+
+    // public Task<string> CreateDocumentFromLocalTemplateAsync(string title)
+    // {
+    //     var path = _cfg["Circularo:TemplatePdfPath"]
+    //         ?? throw new InvalidOperationException("Circularo:TemplatePdfPath is not configured");
+    //     return CreateDocumentFromTemplatePathAsync(path, title);
+    // }
+
+
+
 }

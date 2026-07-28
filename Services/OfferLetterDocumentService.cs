@@ -48,7 +48,52 @@ public class OfferLetterDocumentService
                     return bytes;
           }
 
-          private void FillTemplate(string docxPath, Dictionary<string, string> tokens)
+    /// <summary>
+    /// Merges an arbitrary {{Token}} dictionary into any .docx template and
+    /// returns the LibreOffice-converted PDF bytes. Used by Murabaha Stage 1
+    /// (Promise to Purchase); the Offer Letter path keeps its typed method.
+    /// </summary>
+    public async Task<byte[]> GenerateFromDocxTemplateAsync(string templateDocxPath, Dictionary<string, string> tokens, CancellationToken ct = default)
+    {
+        if (!File.Exists(templateDocxPath))
+            throw new FileNotFoundException($"Docx template not found: {templateDocxPath}");
+
+        var workDir = Path.Combine(Path.GetTempPath(), $"docxmerge-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(workDir);
+        var workingDocx = Path.Combine(workDir, Path.GetFileName(templateDocxPath));
+
+        try
+        {
+            File.Copy(templateDocxPath, workingDocx, overwrite: true);
+
+            using (var doc = DocumentFormat.OpenXml.Packaging.WordprocessingDocument.Open(workingDocx, true))
+            {
+                var body = doc.MainDocumentPart!.Document.Body!;
+                foreach (var text in body.Descendants<DocumentFormat.OpenXml.Wordprocessing.Text>())
+                {
+                    foreach (var (token, value) in tokens)
+                    {
+                        var placeholder = "{{" + token + "}}";
+                        if (text.Text.Contains(placeholder))
+                            text.Text = text.Text.Replace(placeholder, value ?? string.Empty);
+                    }
+                }
+                doc.MainDocumentPart.Document.Save();
+            }
+
+            // Reuse your existing LibreOffice conversion helper here if it has a
+            // different name — this must match the same soffice invocation the
+            // Offer Letter path uses (Templates:LibreOfficePath in appsettings).
+            var pdfPath = await ConvertDocxToPdfAsync(workingDocx, workDir,ct);
+            return await File.ReadAllBytesAsync(pdfPath,ct);
+        }
+        finally
+        {
+            try { Directory.Delete(workDir, recursive: true); }
+            catch { /* best-effort temp cleanup */ }
+        }
+    }
+    private void FillTemplate(string docxPath, Dictionary<string, string> tokens)
           {
                     using var wordDoc = WordprocessingDocument.Open(docxPath, isEditable: true);
                     var body = wordDoc.MainDocumentPart!.Document.Body!;

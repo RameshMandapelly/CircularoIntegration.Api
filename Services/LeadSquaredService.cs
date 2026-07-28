@@ -73,6 +73,44 @@ public class LeadSquaredService
         return (null, null);
     }
 
+
+    /// <summary>
+    /// Fetches arbitrary lead attributes via Leads.GetById, returned as
+    /// schemaName → value. Used by the Murabaha Stage 1 token builder.
+    /// </summary>
+    public async Task<Dictionary<string, string?>> GetLeadFieldsAsync(string leadId, string[] schemaNames)
+    {
+        var url = $"{BaseUrl}/v2/LeadManagement.svc/Leads.GetById?{Keys}&id={Uri.EscapeDataString(leadId)}";
+        _log.LogInformation("LSQ Leads.GetById (fields) URL → {url}", url);
+
+        var res = await _http.GetAsync(url);
+        var body = await res.Content.ReadAsStringAsync();
+        _log.LogInformation("LSQ Leads.GetById (fields) {LeadId} → {Status}", leadId, (int)res.StatusCode);
+
+        if (!res.IsSuccessStatusCode)
+            throw new DownstreamException((int)res.StatusCode, body);
+
+        using var doc = System.Text.Json.JsonDocument.Parse(body);
+        var root = doc.RootElement;
+        var lead = root.ValueKind == System.Text.Json.JsonValueKind.Array && root.GetArrayLength() > 0
+            ? root[0]
+            : root;
+
+        var result = new Dictionary<string, string?>();
+        foreach (var name in schemaNames)
+        {
+            result[name] =
+                lead.ValueKind == System.Text.Json.JsonValueKind.Object &&
+                lead.TryGetProperty(name, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String
+                    ? v.GetString()
+                    : null;
+
+            if (result[name] is null)
+                _log.LogWarning("Murabaha field '{Field}' not found (or null) in GetById response for lead {LeadId}", name, leadId);
+        }
+        return result;
+    }
+
     /// <summary>POST Lead.Update – sets the lead stage (attribute "ProspectStage" by default).</summary>
     public async Task UpdateLeadStageAsync(string leadId, string newStage)
     {

@@ -1,0 +1,7 @@
+appsettings.Local.json
+bin/
+obj/
+publish/
+logs/
+*.user
+.vs/

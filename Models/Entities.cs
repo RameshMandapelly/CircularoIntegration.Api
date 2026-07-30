@@ -27,6 +27,7 @@ public class PhaseDocumentConfig
     // true = merge lead fields into a docx template and convert to PDF
     // (Offer Letter). false = send the static local template as-is.
     public bool RequiresFieldMerge { get; set; } = false;
+    public int SignaturePage { get; set; } = 1;
 }
 
 public enum SigningStatus { Sent = 0, Signed = 1, Attached = 2, Failed = 9 }

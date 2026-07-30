@@ -171,6 +171,13 @@ app.UseMiddleware<ApiKeyMiddleware>();
 
 app.MapControllers();
 app.MapGet("/health", () => Results.Ok(new { status = "UP", timeUtc = DateTime.UtcNow }));
+app.MapGet("/version", (IConfiguration cfg) => Results.Ok(new
+{
+    version = cfg["BuildInfo:Version"],
+    notes = cfg["BuildInfo:Notes"],
+    dllLastWriteUtc = System.IO.File.GetLastWriteTimeUtc(
+        System.Reflection.Assembly.GetExecutingAssembly().Location)
+}));
 
 Log.Information("Circularo Integration Middleware starting…");
 app.Run();

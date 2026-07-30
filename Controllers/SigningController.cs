@@ -79,6 +79,93 @@ public class SigningController : ControllerBase
 
         if (config is null)
             return Ok(new { status = "IGNORED", reason = $"no mapping for stage '{afterStage}'" });
+          //to send  offer letter 
+        if (config.RequiresFieldMerge)
+        {
+            var existingOfferLetter = await _db.SigningTransactions.FirstOrDefaultAsync(
+                t => t.LeadId == leadId && t.PhaseNo == config.PhaseNo && t.DocIndex == 0 && t.Status != SigningStatus.Failed);
+            if (existingOfferLetter is not null)
+            {
+                _log.LogInformation("Duplicate initiate for lead {LeadId} phase {Phase} — already {Status}.",
+                    leadId, config.PhaseNo, existingOfferLetter.Status);
+                return Ok(new { status = "DUPLICATE", leadId, phase = config.PhaseNo, currentStatus = existingOfferLetter.Status.ToString() });
+            }
+
+            string offerDocumentId = string.Empty;
+            try
+            {
+                var offerDetails = await _lsq.GetLeadOfferDetailsAsync(leadId);
+
+                if (string.IsNullOrWhiteSpace(offerDetails.AuthorizedSignatoryEmail))
+                    return UnprocessableEntity(new { message = $"Lead {leadId} has no authorized signatory email", status = 422 });
+
+                if (!offerDetails.IsComplete)
+                    _log.LogWarning("Lead {LeadId} offer letter fields incomplete — sending with blanks.", leadId);
+
+                var recipientEmail = offerDetails.AuthorizedSignatoryEmail!;
+                var offerFirstName = offerDetails.CustomerName;
+
+                var pdfBytes = await _offerLetterDocs.GenerateOfferLetterPdfAsync(offerDetails);
+                offerDocumentId = await _circularo.CreateDocumentFromBytesAsync(
+                    pdfBytes, $"offer-letter-{leadId}.pdf", $"{config.DocumentName} - Lead {leadId}");
+
+                await _circularo.SendForSignatureAsync(
+                    offerDocumentId, recipientEmail,
+                    $"Dear {offerFirstName ?? "Customer"}, please sign: {config.DocumentName}",signaturePage: config.SignaturePage);
+
+                _db.SigningTransactions.Add(new SigningTransaction
+                {
+                    LeadId = leadId,
+                    PhaseNo = config.PhaseNo,
+                    DocIndex = 0,
+                    CircularoRef = offerDocumentId,
+                    CustomerEmail = recipientEmail,
+                    Status = SigningStatus.Sent,
+                    InboundPayload = raw
+                });
+                await _db.SaveChangesAsync();
+
+                _log.LogInformation("Phase {Phase} document sent for lead {LeadId} to {Email}", config.PhaseNo, leadId, recipientEmail);
+                return Ok(new { status = "SENT", leadId, phase = config.PhaseNo, email = recipientEmail });
+            }
+            catch (DownstreamException dex)
+            {
+                _log.LogError("Initiate failed for lead {LeadId}: downstream {Status} {Body}", leadId, dex.StatusCode, dex.ResponseBody);
+                _db.SigningTransactions.Add(new SigningTransaction
+                {
+                    LeadId = leadId,
+                    PhaseNo = config.PhaseNo,
+                    DocIndex = 0,
+                    CircularoRef = offerDocumentId,
+                    Status = SigningStatus.Failed,
+                    ErrorMessage = dex.ResponseBody,
+                    InboundPayload = raw
+                });
+                await _db.SaveChangesAsync();
+                return new ContentResult
+                {
+                    StatusCode = dex.StatusCode,
+                    Content = dex.ResponseBody,
+                    ContentType = "application/json"
+                };
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "Initiate failed for lead {LeadId}", leadId);
+                _db.SigningTransactions.Add(new SigningTransaction
+                {
+                    LeadId = leadId,
+                    PhaseNo = config.PhaseNo,
+                    DocIndex = 0,
+                    CircularoRef = offerDocumentId,
+                    Status = SigningStatus.Failed,
+                    ErrorMessage = ex.Message,
+                    InboundPayload = raw
+                });
+                await _db.SaveChangesAsync();
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
 
         var items = await _db.PhaseDocumentItems
             .Where(i => i.PhaseDocumentConfigId == config.Id && i.IsActive)

@@ -26,7 +26,7 @@ public class ApiKeyMiddleware
         var path = context.Request.Path.Value ?? string.Empty;
 
         // Public endpoints
-        if (path.StartsWith("/swagger") || path.StartsWith("/logs") || path == "/health" || path == "/")
+        if (path.StartsWith("/swagger") || path.StartsWith("/logs") || path == "/health" || path == "/" || path == "/version")
         {
             await _next(context);
             return;

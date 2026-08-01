@@ -60,7 +60,10 @@ public class SigningTransaction
     public string? CallbackPayload { get; set; }
 }
 
-public enum DocMergeStrategy { None, DocxTokens, PdfOverlay }
+// AcroFormFill appended at the end deliberately — inserting it elsewhere would
+// renumber DocxTokens/PdfOverlay's underlying stored int values and silently
+// corrupt every existing PhaseDocumentItem row (Set 2 is already live on these).
+public enum DocMergeStrategy { None, DocxTokens, PdfOverlay, AcroFormFill }
 
 public class PhaseDocumentItem
 {
@@ -83,6 +86,13 @@ public class PhaseDocumentItem
     /// <summary>Only for PdfOverlay: JSON array of {"Token":"CustomerName","Page":1,"X":106,"Top":641.5,"FontSize":10}.
     /// Page is 1-based. X/Top are in PDF points, top-left origin (matches pdfplumber).</summary>
     public string? OverlayFieldsJson { get; set; }
+
+    /// <summary>Only for AcroFormFill: JSON object mapping the PDF's real AcroForm field
+    /// name to a canonical token, e.g. {"Text2":"ContractDay","Client Name":"CompanyName"}.
+    /// A field name may map the same token as another field (repeated fields like "Text39"
+    /// appearing 3x in a doc) — filling by field name naturally updates every widget that
+    /// shares the name. A field intentionally left blank should be omitted from this map.</summary>
+    public string? FormFieldMappingJson { get; set; }
 
     /// <summary>Page the Circularo signature box is placed on in the rendered PDF.</summary>
     public int SignaturePage { get; set; } = 1;

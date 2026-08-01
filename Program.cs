@@ -40,6 +40,7 @@ builder.Services.AddScoped<OfferLetterDocumentService>();
 
 // BUG 4 FIX: register the PDF overlay stamping service (stateless → singleton).
 builder.Services.AddSingleton<PdfOverlayService>();
+builder.Services.AddSingleton<AcroFormFillService>();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();

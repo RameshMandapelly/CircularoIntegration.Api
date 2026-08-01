@@ -17,6 +17,7 @@ public class SigningController : ControllerBase
     private readonly IKfsNotificationService _kfs;
     private readonly OfferLetterDocumentService _offerLetterDocs;
     private readonly PdfOverlayService _overlay;          // BUG 2/4 FIX: injected
+    private readonly AcroFormFillService _acroForm;        // Stage 9: real AcroForm field fill
     private readonly IConfiguration _cfg;                 // BUG 2 FIX: for MurabahaStage1Fields
     private readonly ILogger<SigningController> _log;
 
@@ -27,6 +28,7 @@ public class SigningController : ControllerBase
         IKfsNotificationService kfs,
         OfferLetterDocumentService offerLetterDocs,
         PdfOverlayService overlay,
+        AcroFormFillService acroForm,
         IConfiguration cfg,
         ILogger<SigningController> log)
     {
@@ -36,6 +38,7 @@ public class SigningController : ControllerBase
         _kfs = kfs;
         _offerLetterDocs = offerLetterDocs;
         _overlay = overlay;
+        _acroForm = acroForm;
         _cfg = cfg;
         _log = log;
     }
@@ -79,7 +82,7 @@ public class SigningController : ControllerBase
 
         if (config is null)
             return Ok(new { status = "IGNORED", reason = $"no mapping for stage '{afterStage}'" });
-          //to send  offer letter 
+        //to send  offer letter 
         if (config.RequiresFieldMerge)
         {
             var existingOfferLetter = await _db.SigningTransactions.FirstOrDefaultAsync(
@@ -111,7 +114,7 @@ public class SigningController : ControllerBase
 
                 await _circularo.SendForSignatureAsync(
                     offerDocumentId, recipientEmail,
-                    $"Dear {offerFirstName ?? "Customer"}, please sign: {config.DocumentName}",signaturePage: config.SignaturePage);
+                    $"Dear {offerFirstName ?? "Customer"}, please sign: {config.DocumentName}", signaturePage: config.SignaturePage);
 
                 _db.SigningTransactions.Add(new SigningTransaction
                 {
@@ -183,7 +186,21 @@ public class SigningController : ControllerBase
         // instead of re-fetching the lead per document.
         Dictionary<string, string>? tokenValues = null;
         if (items.Any(i => i.MergeStrategy != DocMergeStrategy.None))
-            tokenValues = await BuildMurabahaTokenValuesAsync(leadId);
+        {
+            
+            // Stage 9 (Sale Contract / Agency Letter / Sale Instruction) and 
+            // Stage 10 (Standing Instruction) each read their own config section; everything
+            // else keeps using MurabahaStage1Fields exactly as before — additive only,
+            // not a behavior change for Stage 7 or Stage 9.
+            
+            var section = config.PhaseNo switch
+            {
+                9 => "MurabahaStage2Fields",
+                10 => "StandingInstructionFields",
+                _ => "MurabahaStage1Fields"
+            };
+            tokenValues = await BuildMurabahaTokenValuesAsync(leadId, section);
+        }
 
         var results = new List<object>();
 
@@ -229,6 +246,18 @@ public class SigningController : ControllerBase
                                 item.TemplatePath, tokenValues!);
                             documentId = await _circularo.CreateDocumentFromBytesAsync(
                                 pdfBytes, $"{item.DocumentName}.pdf", docTitle);
+                            break;
+                        }
+                    case DocMergeStrategy.AcroFormFill:
+                        {
+                            if (string.IsNullOrWhiteSpace(item.FormFieldMappingJson))
+                                throw new InvalidOperationException(
+                                    $"Doc {item.DocIndex} '{item.DocumentName}' is AcroFormFill but FormFieldMappingJson is empty.");
+
+                            var fieldValues = ResolveAcroFormFieldValues(item.FormFieldMappingJson, tokenValues!);
+                            var filled = await _acroForm.FillAndFlattenAsync(item.TemplatePath, fieldValues);
+                            documentId = await _circularo.CreateDocumentFromBytesAsync(
+                                filled, $"{item.DocumentName}.pdf", docTitle);
                             break;
                         }
                     default:
@@ -449,9 +478,9 @@ public class SigningController : ControllerBase
     /// from the overlay/docx services). Day/Month/Year fall back to today's date when
     /// no CRM field is mapped for them.
     /// </summary>
-    private async Task<Dictionary<string, string>> BuildMurabahaTokenValuesAsync(string leadId)
+    private async Task<Dictionary<string, string>> BuildMurabahaTokenValuesAsync(string leadId, string configSection = "MurabahaStage1Fields")
     {
-        var section = _cfg.GetSection("MurabahaStage1Fields");
+        var section = _cfg.GetSection(configSection);
 
         var fieldMap = section.GetChildren()
             .Where(c => c.Key.EndsWith("Field")
@@ -469,7 +498,7 @@ public class SigningController : ControllerBase
         }
         else
         {
-            _log.LogWarning("MurabahaStage1Fields has no confirmed schema mappings yet — all merge tokens will be blank.");
+            _log.LogWarning("{Section} has no confirmed schema mappings yet — all merge tokens will be blank.", configSection);
         }
 
         // Agreement date parts default to today when not CRM-mapped.
@@ -481,6 +510,35 @@ public class SigningController : ControllerBase
         tokens.TryAdd("SignatureDate", now.ToString("dd/MM/yyyy"));
 
         return tokens;
+    }
+
+    /// <summary>
+    /// Stage 9: translates a PhaseDocumentItem's FormFieldMappingJson
+    /// ({"AcroFieldName":"CanonicalToken"}) into the fieldName→value dictionary
+    /// AcroFormFillService needs. Fields whose token has no resolved value (not
+    /// yet confirmed by Hakima, or genuinely blank) are set to empty string rather
+    /// than thrown — same "render blank, log a warning" posture as the other two
+    /// merge strategies, so an unconfirmed field never blocks the whole document.
+    /// </summary>
+    private Dictionary<string, string> ResolveAcroFormFieldValues(string formFieldMappingJson, Dictionary<string, string> tokenValues)
+    {
+        var mapping = JsonSerializer.Deserialize<Dictionary<string, string>>(formFieldMappingJson)
+            ?? new Dictionary<string, string>();
+
+        var fieldValues = new Dictionary<string, string>();
+        foreach (var (acroFieldName, token) in mapping)
+        {
+            if (tokenValues.TryGetValue(token, out var value) && !string.IsNullOrWhiteSpace(value))
+            {
+                fieldValues[acroFieldName] = value;
+            }
+            else
+            {
+                fieldValues[acroFieldName] = string.Empty;
+                _log.LogWarning("AcroForm field '{Field}' → token '{Token}' has no value — leaving blank.", acroFieldName, token);
+            }
+        }
+        return fieldValues;
     }
 
     /// <summary>
@@ -551,8 +609,36 @@ public class SigningController : ControllerBase
         {
             DocMergeStrategy.PdfOverlay => _overlay.Stamp(item.TemplatePath, item.OverlayFieldsJson!, tokens),
             DocMergeStrategy.DocxTokens => await _offerLetterDocs.GenerateFromDocxTemplateAsync(item.TemplatePath, tokens),
+            DocMergeStrategy.AcroFormFill => await _acroForm.FillAndFlattenAsync(item.TemplatePath, ResolveAcroFormFieldValues(item.FormFieldMappingJson!, tokens)),
             _ => await System.IO.File.ReadAllBytesAsync(item.TemplatePath)
         };
+
+        return File(bytes, "application/pdf", $"{item.DocumentName}-{leadId}-debug.pdf");
+    }
+
+    // TEMP — local testing only. Same idea as DebugGenerateMurabahaDoc but for
+    // Stage 9 (Sale Contract / Agency Letter / Sale Instruction). Returns the
+    // filled PDF directly, WITHOUT touching Circularo or the DB.
+    // Usage: GET /api/v1/signing/debug/stage9-doc/{leadId}/{docIndex}
+    // docIndex: 1 = Sale Contract, 2 = Agency Appointment Letter, 3 = Sale Instruction
+    [HttpGet("debug/stage9-doc/{leadId}/{docIndex:int}")]
+    public async Task<IActionResult> DebugGenerateStage9Doc(string leadId, int docIndex)
+    {
+        var config = await _db.PhaseDocumentConfigs.FirstOrDefaultAsync(c => c.PhaseNo == 9);
+        if (config is null) return NotFound(new { error = "Stage 9 config not seeded" });
+
+        var item = await _db.PhaseDocumentItems.FirstOrDefaultAsync(
+            i => i.PhaseDocumentConfigId == config.Id && i.DocIndex == docIndex);
+        if (item is null) return NotFound(new { error = $"No doc item {docIndex} in Stage 9" });
+
+        var tokens = await BuildMurabahaTokenValuesAsync(leadId, "MurabahaStage2Fields");
+        _log.LogInformation("DEBUG stage9 tokens for {LeadId}: {@Tokens}", leadId, tokens);
+
+        if (item.MergeStrategy != DocMergeStrategy.AcroFormFill || string.IsNullOrWhiteSpace(item.FormFieldMappingJson))
+            return BadRequest(new { error = $"Doc {docIndex} is not a properly-configured AcroFormFill item" });
+
+        var fieldValues = ResolveAcroFormFieldValues(item.FormFieldMappingJson, tokens);
+        var bytes = await _acroForm.FillAndFlattenAsync(item.TemplatePath, fieldValues);
 
         return File(bytes, "application/pdf", $"{item.DocumentName}-{leadId}-debug.pdf");
     }

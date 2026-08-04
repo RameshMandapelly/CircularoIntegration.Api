@@ -65,6 +65,16 @@ public class KfsNotificationService : IKfsNotificationService
                 ct: ct);
 
             log.Success = true;
+            try
+            {
+                var kfsBytes = await File.ReadAllBytesAsync(_options.KfsFilePath, ct);
+                var kfsFileName = $"Key Fact Statement-{leadId}.pdf";
+                await _leadSquaredService.AttachDocumentAsync(leadId, kfsFileName, kfsBytes);
+            }
+            catch (Exception attachEx)
+            {
+                _logger.LogWarning(attachEx, "KFS email sent for lead {LeadId} but attaching to LSQ failed — continuing.", leadId);
+            }
         }
         catch (Exception ex)
         {

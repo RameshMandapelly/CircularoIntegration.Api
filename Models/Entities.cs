@@ -7,7 +7,7 @@ public class PhaseDocumentConfig
     [Key]
     public int Id { get; set; }
     public int PhaseNo { get; set; }
-
+    public string? RequiredLeadSource { get; set; }
     /// <summary>Lead stage that triggers sending, e.g. "OFFER ACCEPTED"</summary>
     public string LeadStageTrigger { get; set; } = string.Empty;
 

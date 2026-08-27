@@ -82,94 +82,96 @@ public class SigningController : ControllerBase
 
         if (config is null)
             return Ok(new { status = "IGNORED", reason = $"no mapping for stage '{afterStage}'" });
+        return await SendPhaseDocumentSetAsync(leadId, config, raw);
         //to send  offer letter 
-        if (config.RequiresFieldMerge)
-        {
-            var existingOfferLetter = await _db.SigningTransactions.FirstOrDefaultAsync(
-                t => t.LeadId == leadId && t.PhaseNo == config.PhaseNo && t.DocIndex == 0 && t.Status != SigningStatus.Failed);
-            if (existingOfferLetter is not null)
-            {
-                _log.LogInformation("Duplicate initiate for lead {LeadId} phase {Phase} — already {Status}.",
-                    leadId, config.PhaseNo, existingOfferLetter.Status);
-                return Ok(new { status = "DUPLICATE", leadId, phase = config.PhaseNo, currentStatus = existingOfferLetter.Status.ToString() });
-            }
+        // // if (config.RequiresFieldMerge)
+        // {
+        //     var existingOfferLetter = await _db.SigningTransactions.FirstOrDefaultAsync(
+        //         t => t.LeadId == leadId && t.PhaseNo == config.PhaseNo && t.DocIndex == 0 && t.Status != SigningStatus.Failed);
+        //     if (existingOfferLetter is not null)
+        //     {
+        //         _log.LogInformation("Duplicate initiate for lead {LeadId} phase {Phase} — already {Status}.",
+        //             leadId, config.PhaseNo, existingOfferLetter.Status);
+        //         return Ok(new { status = "DUPLICATE", leadId, phase = config.PhaseNo, currentStatus = existingOfferLetter.Status.ToString() });
+        //     }
 
-            string offerDocumentId = string.Empty;
-            try
-            {
-                var offerDetails = await _lsq.GetLeadOfferDetailsAsync(leadId);
+        //     string offerDocumentId = string.Empty;
+        //     try
+        //     {
+        //         var offerDetails = await _lsq.GetLeadOfferDetailsAsync(leadId);
 
-                if (string.IsNullOrWhiteSpace(offerDetails.AuthorizedSignatoryEmail))
-                    return UnprocessableEntity(new { message = $"Lead {leadId} has no authorized signatory email", status = 422 });
+        //         if (string.IsNullOrWhiteSpace(offerDetails.AuthorizedSignatoryEmail))
+        //             return UnprocessableEntity(new { message = $"Lead {leadId} has no authorized signatory email", status = 422 });
 
-                if (!offerDetails.IsComplete)
-                    _log.LogWarning("Lead {LeadId} offer letter fields incomplete — sending with blanks.", leadId);
+        //         if (!offerDetails.IsComplete)
+        //             _log.LogWarning("Lead {LeadId} offer letter fields incomplete — sending with blanks.", leadId);
 
-                var recipientEmail = offerDetails.AuthorizedSignatoryEmail!;
-                var offerFirstName = offerDetails.CustomerName;
+        //         var recipientEmail = offerDetails.AuthorizedSignatoryEmail!;
+        //         var offerFirstName = offerDetails.CustomerName;
 
-                var pdfBytes = await _offerLetterDocs.GenerateOfferLetterPdfAsync(offerDetails);
-                offerDocumentId = await _circularo.CreateDocumentFromBytesAsync(
-                    pdfBytes, $"offer-letter-{leadId}.pdf", $"{config.DocumentName} - Lead {leadId}");
+        //         var pdfBytes = await _offerLetterDocs.GenerateOfferLetterPdfAsync(offerDetails);
+        //         offerDocumentId = await _circularo.CreateDocumentFromBytesAsync(
+        //             pdfBytes, $"offer-letter-{leadId}.pdf", $"{config.DocumentName} - Lead {leadId}");
 
-                await _circularo.SendForSignatureAsync(
-                    offerDocumentId, recipientEmail,
-                    $"Dear {offerFirstName ?? "Customer"}, please sign: {config.DocumentName}", signaturePage: config.SignaturePage);
+        //         await _circularo.SendForSignatureAsync(
+        //             offerDocumentId, recipientEmail,
+        //             $"Dear {offerFirstName ?? "Customer"}, please sign: {config.DocumentName}", signaturePage: config.SignaturePage);
 
-                _db.SigningTransactions.Add(new SigningTransaction
-                {
-                    LeadId = leadId,
-                    PhaseNo = config.PhaseNo,
-                    DocIndex = 0,
-                    CircularoRef = offerDocumentId,
-                    CustomerEmail = recipientEmail,
-                    Status = SigningStatus.Sent,
-                    InboundPayload = raw
-                });
-                await _db.SaveChangesAsync();
+        //         _db.SigningTransactions.Add(new SigningTransaction
+        //         {
+        //             LeadId = leadId,
+        //             PhaseNo = config.PhaseNo,
+        //             DocIndex = 0,
+        //             CircularoRef = offerDocumentId,
+        //             CustomerEmail = recipientEmail,
+        //             Status = SigningStatus.Sent,
+        //             InboundPayload = raw
+        //         });
+        //         await _db.SaveChangesAsync();
 
-                _log.LogInformation("Phase {Phase} document sent for lead {LeadId} to {Email}", config.PhaseNo, leadId, recipientEmail);
-                return Ok(new { status = "SENT", leadId, phase = config.PhaseNo, email = recipientEmail });
-            }
-            catch (DownstreamException dex)
-            {
-                _log.LogError("Initiate failed for lead {LeadId}: downstream {Status} {Body}", leadId, dex.StatusCode, dex.ResponseBody);
-                _db.SigningTransactions.Add(new SigningTransaction
-                {
-                    LeadId = leadId,
-                    PhaseNo = config.PhaseNo,
-                    DocIndex = 0,
-                    CircularoRef = offerDocumentId,
-                    Status = SigningStatus.Failed,
-                    ErrorMessage = dex.ResponseBody,
-                    InboundPayload = raw
-                });
-                await _db.SaveChangesAsync();
-                return new ContentResult
-                {
-                    StatusCode = dex.StatusCode,
-                    Content = dex.ResponseBody,
-                    ContentType = "application/json"
-                };
-            }
-            catch (Exception ex)
-            {
-                _log.LogError(ex, "Initiate failed for lead {LeadId}", leadId);
-                _db.SigningTransactions.Add(new SigningTransaction
-                {
-                    LeadId = leadId,
-                    PhaseNo = config.PhaseNo,
-                    DocIndex = 0,
-                    CircularoRef = offerDocumentId,
-                    Status = SigningStatus.Failed,
-                    ErrorMessage = ex.Message,
-                    InboundPayload = raw
-                });
-                await _db.SaveChangesAsync();
-                return StatusCode(500, new { error = ex.Message });
-            }
-        }
-
+        //         _log.LogInformation("Phase {Phase} document sent for lead {LeadId} to {Email}", config.PhaseNo, leadId, recipientEmail);
+        //         return Ok(new { status = "SENT", leadId, phase = config.PhaseNo, email = recipientEmail });
+        //     }
+        //     catch (DownstreamException dex)
+        //     {
+        //         _log.LogError("Initiate failed for lead {LeadId}: downstream {Status} {Body}", leadId, dex.StatusCode, dex.ResponseBody);
+        //         _db.SigningTransactions.Add(new SigningTransaction
+        //         {
+        //             LeadId = leadId,
+        //             PhaseNo = config.PhaseNo,
+        //             DocIndex = 0,
+        //             CircularoRef = offerDocumentId,
+        //             Status = SigningStatus.Failed,
+        //             ErrorMessage = dex.ResponseBody,
+        //             InboundPayload = raw
+        //         });
+        //         await _db.SaveChangesAsync();
+        //         return new ContentResult
+        //         {
+        //             StatusCode = dex.StatusCode,
+        //             Content = dex.ResponseBody,
+        //             ContentType = "application/json"
+        //         };
+        //     }
+        //     catch (Exception ex)
+        //     {
+        //         _log.LogError(ex, "Initiate failed for lead {LeadId}", leadId);
+        //         _db.SigningTransactions.Add(new SigningTransaction
+        //         {
+        //             LeadId = leadId,
+        //             PhaseNo = config.PhaseNo,
+        //             DocIndex = 0,
+        //             CircularoRef = offerDocumentId,
+        //             Status = SigningStatus.Failed,
+        //             ErrorMessage = ex.Message,
+        //             InboundPayload = raw
+        //         });
+        //         await _db.SaveChangesAsync();
+        //         return StatusCode(500, new { error = ex.Message });
+        //     }
+        // }
+        /////////////////////
+        /// ///////////////////////////////
         var items = await _db.PhaseDocumentItems
             .Where(i => i.PhaseDocumentConfigId == config.Id && i.IsActive)
             .OrderBy(i => i.DocIndex)
@@ -325,7 +327,274 @@ public class SigningController : ControllerBase
 
         return Ok(new { status = "SENT_SET", leadId, phase = config.PhaseNo, totalDocs = items.Count, results });
     }
+    // =====================================================================
+    // Shared core — sends every active document for a matched phase config.
+    // Called by API #1 (real LSQ webhook). From Step 3 onward it will ALSO be
+    // called internally by API #2 (Completed) to auto-chain into the next
+    // phase without waiting for a manual LSQ stage click. Behavior is
+    // IDENTICAL either way — this is a straight extraction, no logic changed.
+    // =====================================================================
+    private async Task<IActionResult> SendPhaseDocumentSetAsync(string leadId, PhaseDocumentConfig config, string raw)
+    {
+        // ---- Source gate: some phases (currently only Phase 10 / Standing
+        // Instruction) are restricted to a specific Lead Source per Hakima's
+        // fintech-by-fintech rules. NULL = no restriction, unaffected phases
+        // skip this entirely. If the lead's source doesn't match, we skip the
+        // document but still advance the stage so the lead doesn't get stuck.
+        if (!string.IsNullOrWhiteSpace(config.RequiredLeadSource))
+        {
+            var sourceFields = await _lsq.GetLeadFieldsAsync(leadId, new[] { "Source" });
+            var leadSource = sourceFields.TryGetValue("Source", out var s) ? s : null;
 
+            if (!string.Equals(leadSource, config.RequiredLeadSource, StringComparison.OrdinalIgnoreCase))
+            {
+                _log.LogInformation("Skipping document for phase {Phase}, lead {LeadId}: source '{Source}' does not match required '{Required}'. Advancing stage anyway.",
+                    config.PhaseNo, leadId, leadSource ?? "(blank)", config.RequiredLeadSource);
+
+                await _lsq.UpdateLeadStageAsync(leadId, config.NextLeadStage);
+
+                return Ok(new
+                {
+                    status = "SKIPPED_ADVANCED",
+                    leadId,
+                    phase = config.PhaseNo,
+                    reason = $"Lead source '{leadSource}' does not match required '{config.RequiredLeadSource}' — document skipped",
+                    nextStage = config.NextLeadStage
+                });
+            }
+        }
+
+        //to send  offer letter 
+        if (config.RequiresFieldMerge)
+            //to send  offer letter 
+            if (config.RequiresFieldMerge)
+        {
+            var existingOfferLetter = await _db.SigningTransactions.FirstOrDefaultAsync(
+                t => t.LeadId == leadId && t.PhaseNo == config.PhaseNo && t.DocIndex == 0 && t.Status != SigningStatus.Failed);
+            if (existingOfferLetter is not null)
+            {
+                _log.LogInformation("Duplicate initiate for lead {LeadId} phase {Phase} — already {Status}.",
+                    leadId, config.PhaseNo, existingOfferLetter.Status);
+                return Ok(new { status = "DUPLICATE", leadId, phase = config.PhaseNo, currentStatus = existingOfferLetter.Status.ToString() });
+            }
+
+            string offerDocumentId = string.Empty;
+            try
+            {
+                var offerDetails = await _lsq.GetLeadOfferDetailsAsync(leadId);
+
+                if (string.IsNullOrWhiteSpace(offerDetails.AuthorizedSignatoryEmail))
+                    return UnprocessableEntity(new { message = $"Lead {leadId} has no authorized signatory email", status = 422 });
+
+                if (!offerDetails.IsComplete)
+                    _log.LogWarning("Lead {LeadId} offer letter fields incomplete — sending with blanks.", leadId);
+
+                var recipientEmail = offerDetails.AuthorizedSignatoryEmail!;
+                var offerFirstName = offerDetails.CustomerName;
+
+                var pdfBytes = await _offerLetterDocs.GenerateOfferLetterPdfAsync(offerDetails);
+                offerDocumentId = await _circularo.CreateDocumentFromBytesAsync(
+                    pdfBytes, $"offer-letter-{leadId}.pdf", $"{config.DocumentName} - Lead {leadId}");
+
+                await _circularo.SendForSignatureAsync(
+                    offerDocumentId, recipientEmail,
+                    $"Dear {offerFirstName ?? "Customer"}, please sign: {config.DocumentName}", signaturePage: config.SignaturePage);
+
+                _db.SigningTransactions.Add(new SigningTransaction
+                {
+                    LeadId = leadId,
+                    PhaseNo = config.PhaseNo,
+                    DocIndex = 0,
+                    CircularoRef = offerDocumentId,
+                    CustomerEmail = recipientEmail,
+                    Status = SigningStatus.Sent,
+                    InboundPayload = raw
+                });
+                await _db.SaveChangesAsync();
+
+                _log.LogInformation("Phase {Phase} document sent for lead {LeadId} to {Email}", config.PhaseNo, leadId, recipientEmail);
+                return Ok(new { status = "SENT", leadId, phase = config.PhaseNo, email = recipientEmail });
+            }
+            catch (DownstreamException dex)
+            {
+                _log.LogError("Initiate failed for lead {LeadId}: downstream {Status} {Body}", leadId, dex.StatusCode, dex.ResponseBody);
+                _db.SigningTransactions.Add(new SigningTransaction
+                {
+                    LeadId = leadId,
+                    PhaseNo = config.PhaseNo,
+                    DocIndex = 0,
+                    CircularoRef = offerDocumentId,
+                    Status = SigningStatus.Failed,
+                    ErrorMessage = dex.ResponseBody,
+                    InboundPayload = raw
+                });
+                await _db.SaveChangesAsync();
+                return new ContentResult
+                {
+                    StatusCode = dex.StatusCode,
+                    Content = dex.ResponseBody,
+                    ContentType = "application/json"
+                };
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "Initiate failed for lead {LeadId}", leadId);
+                _db.SigningTransactions.Add(new SigningTransaction
+                {
+                    LeadId = leadId,
+                    PhaseNo = config.PhaseNo,
+                    DocIndex = 0,
+                    CircularoRef = offerDocumentId,
+                    Status = SigningStatus.Failed,
+                    ErrorMessage = ex.Message,
+                    InboundPayload = raw
+                });
+                await _db.SaveChangesAsync();
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        var items = await _db.PhaseDocumentItems
+            .Where(i => i.PhaseDocumentConfigId == config.Id && i.IsActive)
+            .OrderBy(i => i.DocIndex)
+            .ToListAsync();
+
+        if (!items.Any())
+            return Ok(new { status = "IGNORED", reason = $"phase {config.PhaseNo} has no active document items" });
+
+        var (email, firstName) = await _lsq.GetLeadEmailAsync(leadId);
+        if (string.IsNullOrWhiteSpace(email))
+            return UnprocessableEntity(new { message = $"Lead {leadId} has no email address", status = 422 });
+
+        Dictionary<string, string>? tokenValues = null;
+        if (items.Any(i => i.MergeStrategy != DocMergeStrategy.None))
+        {
+            var section = config.PhaseNo switch
+            {
+                9 => "MurabahaStage2Fields",
+                10 => "StandingInstructionFields",
+                _ => "MurabahaStage1Fields"
+            };
+            tokenValues = await BuildMurabahaTokenValuesAsync(leadId, section);
+        }
+
+        var results = new List<object>();
+
+        foreach (var item in items)
+        {
+            var existing = await _db.SigningTransactions.FirstOrDefaultAsync(
+                t => t.LeadId == leadId && t.PhaseNo == config.PhaseNo &&
+                     t.DocIndex == item.DocIndex && t.Status != SigningStatus.Failed);
+
+            if (existing is not null)
+            {
+                _log.LogInformation("Duplicate initiate for lead {LeadId} phase {Phase} doc {DocIndex} — already {Status}.",
+                    leadId, config.PhaseNo, item.DocIndex, existing.Status);
+                results.Add(new { item.DocIndex, item.DocumentName, status = "DUPLICATE", currentStatus = existing.Status.ToString() });
+                continue;
+            }
+
+            string documentId = string.Empty;
+            try
+            {
+                var docTitle = $"{item.DocumentName} - Lead {leadId}";
+
+                switch (item.MergeStrategy)
+                {
+                    case DocMergeStrategy.PdfOverlay:
+                        {
+                            if (string.IsNullOrWhiteSpace(item.OverlayFieldsJson))
+                                throw new InvalidOperationException(
+                                    $"Doc {item.DocIndex} '{item.DocumentName}' is PdfOverlay but OverlayFieldsJson is empty.");
+
+                            var stamped = _overlay.Stamp(item.TemplatePath, item.OverlayFieldsJson, tokenValues!);
+                            documentId = await _circularo.CreateDocumentFromBytesAsync(
+                                stamped, $"{item.DocumentName}.pdf", docTitle);
+                            break;
+                        }
+                    case DocMergeStrategy.DocxTokens:
+                        {
+                            var pdfBytes = await _offerLetterDocs.GenerateFromDocxTemplateAsync(
+                                item.TemplatePath, tokenValues!);
+                            documentId = await _circularo.CreateDocumentFromBytesAsync(
+                                pdfBytes, $"{item.DocumentName}.pdf", docTitle);
+                            break;
+                        }
+                    case DocMergeStrategy.AcroFormFill:
+                        {
+                            if (string.IsNullOrWhiteSpace(item.FormFieldMappingJson))
+                                throw new InvalidOperationException(
+                                    $"Doc {item.DocIndex} '{item.DocumentName}' is AcroFormFill but FormFieldMappingJson is empty.");
+
+                            var fieldValues = ResolveAcroFormFieldValues(item.FormFieldMappingJson, tokenValues!);
+                            var filled = await _acroForm.FillAndFlattenAsync(item.TemplatePath, fieldValues);
+                            documentId = await _circularo.CreateDocumentFromBytesAsync(
+                                filled, $"{item.DocumentName}.pdf", docTitle);
+                            break;
+                        }
+                    default:
+                        documentId = await _circularo.CreateDocumentFromTemplatePathAsync(item.TemplatePath, docTitle);
+                        break;
+                }
+
+                await _circularo.SendForSignatureAsync(
+                    documentId, email,
+                    $"Dear {firstName ?? "Customer"}, please sign: {item.DocumentName}",
+                    signaturePage: item.SignaturePage);
+
+                _db.SigningTransactions.Add(new SigningTransaction
+                {
+                    LeadId = leadId,
+                    PhaseNo = config.PhaseNo,
+                    DocIndex = item.DocIndex,
+                    CircularoRef = documentId,
+                    CustomerEmail = email,
+                    Status = SigningStatus.Sent,
+                    InboundPayload = raw
+                });
+                await _db.SaveChangesAsync();
+
+                _log.LogInformation("Set doc {DocIndex} '{Name}' sent for lead {LeadId} to {Email}",
+                    item.DocIndex, item.DocumentName, leadId, email);
+                results.Add(new { item.DocIndex, item.DocumentName, status = "SENT" });
+            }
+            catch (DownstreamException dex)
+            {
+                _log.LogError("Set doc {DocIndex} failed for lead {LeadId}: {Status} {Body}",
+                    item.DocIndex, leadId, dex.StatusCode, dex.ResponseBody);
+                _db.SigningTransactions.Add(new SigningTransaction
+                {
+                    LeadId = leadId,
+                    PhaseNo = config.PhaseNo,
+                    DocIndex = item.DocIndex,
+                    CircularoRef = documentId,
+                    Status = SigningStatus.Failed,
+                    ErrorMessage = dex.ResponseBody,
+                    InboundPayload = raw
+                });
+                await _db.SaveChangesAsync();
+                results.Add(new { item.DocIndex, item.DocumentName, status = "FAILED", error = dex.ResponseBody });
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "Set doc {DocIndex} failed locally for lead {LeadId}", item.DocIndex, leadId);
+                _db.SigningTransactions.Add(new SigningTransaction
+                {
+                    LeadId = leadId,
+                    PhaseNo = config.PhaseNo,
+                    DocIndex = item.DocIndex,
+                    CircularoRef = documentId,
+                    Status = SigningStatus.Failed,
+                    ErrorMessage = ex.Message,
+                    InboundPayload = raw
+                });
+                await _db.SaveChangesAsync();
+                results.Add(new { item.DocIndex, item.DocumentName, status = "FAILED", error = ex.Message });
+            }
+        }
+
+        return Ok(new { status = "SENT_SET", leadId, phase = config.PhaseNo, totalDocs = items.Count, results });
+    }
     // =====================================================================
     // API #2 — called by the CIRCULARO webhook when a document is signed.
     // Attaches the signed PDF; advances the stage only when ALL docs in
@@ -422,11 +691,46 @@ public class SigningController : ControllerBase
                 });
             }
 
+            // await _lsq.UpdateLeadStageAsync(txn.LeadId, config.NextLeadStage);
+            // _log.LogInformation("Lead {LeadId} completed ALL {Total} docs in phase {Phase}: stage → '{Stage}'",
+            //     txn.LeadId, activeDocIndexes.Count, txn.PhaseNo, config.NextLeadStage);
+
+            // return Ok(new { status = "COMPLETED", leadId = txn.LeadId, nextStage = config.NextLeadStage });
+
+            ////////
+            /// 
             await _lsq.UpdateLeadStageAsync(txn.LeadId, config.NextLeadStage);
             _log.LogInformation("Lead {LeadId} completed ALL {Total} docs in phase {Phase}: stage → '{Stage}'",
                 txn.LeadId, activeDocIndexes.Count, txn.PhaseNo, config.NextLeadStage);
 
-            return Ok(new { status = "COMPLETED", leadId = txn.LeadId, nextStage = config.NextLeadStage });
+            // ---- Auto-chain: if the stage we just wrote is itself a trigger for
+            // another phase, send that phase's documents now instead of waiting
+            // for a manual LSQ stage click. SendPhaseDocumentSetAsync's own
+            // duplicate-transaction guard makes this safe even if an LSQ webhook
+            // for that same stage also fires separately.
+            object? chainResult = null;
+            var nextConfig = await _db.PhaseDocumentConfigs
+                .FirstOrDefaultAsync(c => c.IsActive && c.LeadStageTrigger == config.NextLeadStage);
+
+            if (nextConfig is not null)
+            {
+                _log.LogInformation("Auto-chaining lead {LeadId} → phase {NextPhase} ('{Stage}') — no manual LSQ click needed.",
+                    txn.LeadId, nextConfig.PhaseNo, config.NextLeadStage);
+
+                await _kfs.HandleStageChangeAsync(txn.LeadId, config.NextLeadStage);
+                var chainedActionResult = await SendPhaseDocumentSetAsync(txn.LeadId, nextConfig, raw);
+                if (chainedActionResult is ObjectResult objResult)
+                    chainResult = objResult.Value;
+            }
+
+            return Ok(new
+            {
+                status = "COMPLETED",
+                leadId = txn.LeadId,
+                nextStage = config.NextLeadStage,
+                chainedPhase = nextConfig?.PhaseNo,
+                chainedResult = chainResult
+            });
         }
         catch (DownstreamException dex)
         {

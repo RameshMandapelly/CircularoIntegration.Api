@@ -616,6 +616,28 @@ public class SigningController : ControllerBase
         var documentId = FindFirstString(payload, "documentId", "docId", "id", "document", "objectId");
         var eventName = FindFirstString(payload, "event", "action", "status", "type");
 
+        // ===== NUQI Approved Stage: NUQI documents go to their own handler (needs Viewed/Declined/Expired too).
+        // Non-NUQI documents fall through to the existing logic unchanged. If the NUQI tables are missing or the
+        // lookup fails, we log and continue with the existing flow so the 4 live Murabaha stages are never blocked.
+        if (!string.IsNullOrWhiteSpace(documentId))
+        {
+            try
+            {
+                var nuqi = HttpContext.RequestServices
+                    .GetRequiredService<CircularoIntegration.Api.Services.Nuqi.NuqiApprovedPackageService>();
+                if (await nuqi.OwnsCircularoDocumentAsync(documentId))
+                {
+                    var nuqiResult = await nuqi.HandleCircularoCallbackAsync(raw);
+                    return StatusCode(nuqiResult.HttpStatus, nuqiResult.Body);
+                }
+            }
+            catch (Exception nuqiEx)
+            {
+                _log.LogError(nuqiEx, "NUQI callback routing failed for doc {DocId} – continuing with standard flow", documentId);
+            }
+        }
+        // ===== end NUQI =====
+
         var completionEvents = new[] { "documentSigned", "documentCompleted" };
         if (eventName is not null && !completionEvents.Contains(eventName, StringComparer.OrdinalIgnoreCase))
             return Ok(new { status = "IGNORED", reason = $"event '{eventName}' is not a signing completion" });

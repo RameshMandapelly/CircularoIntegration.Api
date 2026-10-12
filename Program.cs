@@ -5,6 +5,7 @@ using CircularoIntegration.Api.Services;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using CircularoIntegration.Api.Config;
+using CircularoIntegration.Api.Services.Nuqi;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
@@ -41,6 +42,19 @@ builder.Services.AddScoped<OfferLetterDocumentService>();
 // BUG 4 FIX: register the PDF overlay stamping service (stateless → singleton).
 builder.Services.AddSingleton<PdfOverlayService>();
 builder.Services.AddSingleton<AcroFormFillService>();
+// ===================== NUQI Gold – Approved Stage Automation =====================
+builder.Services.Configure<NuqiApprovedOptions>(builder.Configuration.GetSection("NuqiApproved"));
+builder.Services.AddDbContext<NuqiDbContext>(opt =>
+    opt.UseMySql(connStrMySQL, ServerVersion.AutoDetect(connStrMySQL)));
+builder.Services.AddHttpClient<NuqiLeadClient>();
+builder.Services.AddHttpClient<NuqiCircularoClient>();
+builder.Services.AddSingleton<NuqiAuditService>();
+builder.Services.AddScoped<NuqiPackageValidator>();
+builder.Services.AddScoped<NuqiDocumentBuilder>();
+builder.Services.AddScoped<NuqiNotificationService>();
+builder.Services.AddScoped<NuqiApprovedPackageService>();
+builder.Services.AddHostedService<NuqiReconciliationWorker>();
+// ==================================================================================
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();

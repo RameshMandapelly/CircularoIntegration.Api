@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Serilog;
 using CircularoIntegration.Api.Config;
 using CircularoIntegration.Api.Services.Nuqi;
+using CircularoIntegration.Api.Services.Dda;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
@@ -55,7 +56,15 @@ builder.Services.AddScoped<NuqiNotificationService>();
 builder.Services.AddScoped<NuqiApprovedPackageService>();
 builder.Services.AddHostedService<NuqiReconciliationWorker>();
 // ==================================================================================
-
+// ===================== NUQI Gold – DDA (DD Marketplace) demo =====================
+builder.Services.Configure<DdaOptions>(builder.Configuration.GetSection("Dda"));
+builder.Services.AddDbContext<DdaDbContext>(opt =>
+    opt.UseMySql(connStrMySQL, ServerVersion.AutoDetect(connStrMySQL)));
+builder.Services.AddHttpClient<DdaGatewayClient>();
+builder.Services.AddSingleton<DdaAuditService>();
+builder.Services.AddScoped<DdaMandateService>();
+builder.Services.AddHostedService<DdaStatusWorker>();
+// =================================================================================
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

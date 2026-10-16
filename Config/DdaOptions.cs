@@ -111,6 +111,11 @@ public class DdaTrackingOptions
     public int MaxPerSweep { get; set; } = 50;
     public bool AttachUnsignedPdf { get; set; } = true;
     public bool AttachSignedPdf { get; set; } = true;
+    /// <summary>
+    /// Raw gateway status codes (DD Marketplace / CBUAE, compared case-insensitively, not remapped) at which the signed PDF
+    /// is fetched from /signed-pdf and attached to the lead. Retried on every poll until it succeeds.
+    /// </summary>
+    public string[] SignedPdfOnGatewayStatuses { get; set; } = { "ACCP" };
 
     /// <summary>JSON property names searched (recursively, case-insensitive) in gateway responses.</summary>
     public string[] DdaIdFields { get; set; } = { "ddaId", "id", "mandateId" };

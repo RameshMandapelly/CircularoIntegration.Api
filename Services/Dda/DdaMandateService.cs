@@ -301,7 +301,12 @@ public class DdaMandateService
         if (changed) row.LastStatusChangeAtUtc = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
 
-        if (!changed) return false;
+        if (!changed)
+        {
+            // status unchanged – but the signed PDF may still be outstanding (first attempt failed, or mandate was already at ACCP)
+            await TryAttachSignedPdfAsync(row, newStatus, rawStatus, corr, source, ct);
+            return false;
+        }
 
         await _audit.WriteAsync(corr, row.LeadId, "DDA_STATUS_CHANGED", Svc, source, NuqiOutcome.Success, old, newStatus, $"gateway status '{rawStatus}'");
 
@@ -319,23 +324,37 @@ public class DdaMandateService
         await SafeNoteAsync(row.LeadId, note);
         await SafeWriteFieldsAsync(row);
 
-        // ---- signed form once the customer has signed (BRD DDA-18)
-        if (T.AttachSignedPdf && !row.SignedPdfAttached && (newStatus == DdaStatus.PendingBank || newStatus == DdaStatus.Active))
-        {
-            try
-            {
-                var pdf = await FetchPdfAsync(() => _gw.GetSignedPdfAsync(row.DdaId!, ct));
-                if (pdf is not null)
-                {
-                    await _lsq.AttachDocumentAsync(row.LeadId, $"DDA-Signed-{SafeName(row.DdaReferenceNumber)}.pdf", pdf);
-                    row.SignedPdfAttached = true;
-                    await _db.SaveChangesAsync(ct);
-                    await _audit.WriteAsync(corr, row.LeadId, "DDA_SIGNED_PDF_ATTACHED", Svc, source, NuqiOutcome.Success);
-                }
-            }
-            catch (Exception ex) { _log.LogWarning(ex, "DDA signed PDF attach failed for lead {LeadId}", row.LeadId); }
-        }
+        // ---- signed form (BRD DDA-18): at the configured gateway status (default ACCP)
+        await TryAttachSignedPdfAsync(row, newStatus, rawStatus, corr, source, ct);
         return true;
+    }
+
+    private bool WantsSignedPdf(DdaRequest row, string newStatus, string? rawStatus) =>
+        T.AttachSignedPdf && !row.SignedPdfAttached &&
+        (newStatus == DdaStatus.PendingBank || newStatus == DdaStatus.Active ||
+         (!string.IsNullOrWhiteSpace(rawStatus) &&
+          T.SignedPdfOnGatewayStatuses.Contains(rawStatus.Trim(), StringComparer.OrdinalIgnoreCase)));
+
+    /// <summary>Fetches the signed PDF from the gateway and attaches it to the lead. Never throws.</summary>
+    private async Task TryAttachSignedPdfAsync(DdaRequest row, string newStatus, string? rawStatus, string corr, string source, CancellationToken ct)
+    {
+        if (!WantsSignedPdf(row, newStatus, rawStatus)) return;
+        _log.LogInformation("DDA signed PDF: fetching for ddaId {DdaId}, lead {LeadId}, gateway status {Status}", row.DdaId, row.LeadId, rawStatus);
+        try
+        {
+            var pdf = await FetchPdfAsync(() => _gw.GetSignedPdfAsync(row.DdaId!, ct));
+            if (pdf is null)
+            {
+                _log.LogWarning("DDA signed PDF not available yet for {DdaId} (status {Status})", row.DdaId, rawStatus);
+                return;
+            }
+            await _lsq.AttachDocumentAsync(row.LeadId, $"DDA-Signed-{SafeName(row.DdaReferenceNumber)}.pdf", pdf);
+            row.SignedPdfAttached = true;
+            row.UpdatedAtUtc = DateTime.UtcNow;
+            await _db.SaveChangesAsync(ct);
+            await _audit.WriteAsync(corr, row.LeadId, "DDA_SIGNED_PDF_ATTACHED", Svc, source, NuqiOutcome.Success, detail: $"gateway status '{rawStatus}'");
+        }
+        catch (Exception ex) { _log.LogWarning(ex, "DDA signed PDF attach failed for lead {LeadId}", row.LeadId); }
     }
 
     /// <summary>Called by DdaStatusWorker. Polls every non-final mandate (BRD DDA-19). Returns how many were checked.</summary>
